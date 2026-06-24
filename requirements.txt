@@ -1,0 +1,7 @@
+# 설치: pip install -r requirements.txt
+# 권장: Python 3.10 이상 / 가상환경(venv) 사용
+
+streamlit>=1.46      # st.navigation(position="top") 상단 탭, st.logo 등에 필요
+pandas>=2.0          # CSV 데이터 관리
+pillow>=10.0         # 더미 영상 생성·탐지 박스 렌더링 (import 명은 PIL)
+altair>=5.0          # 도넛 차트·SHAP 히스토그램 (Streamlit 내장 의존성, 명시 설치)

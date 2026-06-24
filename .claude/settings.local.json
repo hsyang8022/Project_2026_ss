@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($content = Get-Content \"참고자료\\\\청출어람_대시보드_디자인.html\" -Encoding UTF8; $i=0; foreach \\($line in $content\\) { $i++; if \\($line.Length -gt 300\\) { Write-Output \\(\"$i : \" + $line.Substring\\(0,150\\) + \" ...[LONG: \" + $line.Length + \"]\"\\) } else { Write-Output \\(\"$i : \" + $line\\) } })",
+      "PowerShell(python -m pip --version)",
+      "PowerShell(python -c \"import streamlit; print\\('streamlit', streamlit.__version__\\)\")",
+      "PowerShell(python -m pip install streamlit pillow pandas --quiet)",
+      "PowerShell(python -c \"import streamlit, PIL, pandas; print\\('streamlit', streamlit.__version__, '| pillow', PIL.__version__, '| pandas', pandas.__version__\\)\")",
+      "PowerShell(python verify_app.py)",
+      "PowerShell($proc = Start-Process python -ArgumentList \"-m\",\"streamlit\",\"run\",\"app.py\",\"--server.headless\",\"true\",\"--server.port\",\"8503\" -PassThru -WindowStyle Hidden; Start-Sleep -Seconds 8; try { $r = Invoke-WebRequest \"http://localhost:8503\" -UseBasicParsing -TimeoutSec 10; Write-Output \\(\"HTTP \" + $r.StatusCode\\) } catch { Write-Output \\(\"FAILED: \" + $_.Exception.Message\\) }; Stop-Process -Id $proc.Id -Force -Confirm:$false)",
+      "PowerShell(python generate_dummy_data.py)",
+      "PowerShell(python -c \"import pandas as pd; print\\(pd.read_csv\\('data/regions.csv', encoding='utf-8-sig'\\).head\\(2\\).to_string\\(\\)\\); print\\(\\); print\\(pd.read_csv\\('data/analysis_log.csv', encoding='utf-8-sig'\\).head\\(3\\).to_string\\(\\)\\)\")",
+      "PowerShell($env:PYTHONIOENCODING='utf-8'; python -c \"import pandas as pd; df=pd.read_csv\\('data/analysis_log.csv', encoding='utf-8-sig'\\); print\\(df.columns.tolist\\(\\)\\); print\\(df.head\\(3\\).to_string\\(\\)\\); print\\(df['상태'].value_counts\\(\\).to_dict\\(\\)\\)\")",
+      "PowerShell($env:PYTHONIOENCODING='utf-8'; python verify_app.py 2>&1 | Select-String -Pattern \"OK|FAIL|결과\")",
+      "PowerShell($env:PYTHONIOENCODING='utf-8'; python verify_flow.py 2>&1 | Select-String -Pattern \"OK|통과|Error|assert\")",
+      "PowerShell(python -m pip install playwright --quiet)",
+      "PowerShell(python -m playwright install chromium --with-deps 2>&1)",
+      "PowerShell($proc = Start-Process python -ArgumentList \"-m\",\"streamlit\",\"run\",\"app.py\",\"--server.headless\",\"true\",\"--server.port\",\"8504\" -PassThru -WindowStyle Hidden; Start-Sleep -Seconds 7; $env:PYTHONIOENCODING='utf-8'; python verify_fit.py; Stop-Process -Id $proc.Id -Force -Confirm:$false)"
+    ]
+  },
+  "enabledPlugins": {
+    "ponytail@ponytail": true
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(if \\(Test-Path \".venv\"\\) { Remove-Item -Recurse -Force \".venv\" }; python -m venv .venv; Write-Output \"venv created: $\\(Test-Path '.venv\\\\Scripts\\\\activate.bat'\\)\")"
+    ]
+  }
+}

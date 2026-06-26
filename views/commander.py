@@ -13,8 +13,11 @@ import streamlit as st
 
 from common import (COMMANDER_ACTIONS, COMMANDER_COLS, COMMANDER_PATH, SENSORS,
                     TARGET_TYPE_GUIDE, append_csv_row, change_totals, classify_target_type,
-                    current_user, list_scenes, load_commander_actions, load_detections,
-                    load_opinions, render_header, review_needed_count, scene_meta)
+                    current_user, donut_chart, list_scenes, load_commander_actions,
+                    load_detections, render_header, review_needed_count, scene_meta)
+
+ACTION_STATUS_ORDER = ["조치완료", "미조치"]
+ACTION_STATUS_COLORS = ["#1f6fde", "#b8c4d6"]
 
 
 def _candidates() -> pd.DataFrame:
@@ -70,56 +73,63 @@ def _report_html(cand: pd.DataFrame, changes: dict, n_review: int, actions: pd.D
 def commander_page() -> None:
     render_header("지휘관 요약", "재확인 필요 표적 후보를 확인하고 후속 조치를 기록·보고합니다.")
 
-    changes = change_totals()
-    n_review = review_needed_count()
+    changes = change_totals()  # 보고서 KPI용
+    n_review = review_needed_count()  # 보고서 KPI용
     cand = _candidates()
+    actions = load_commander_actions()
 
-    # ── 요약 KPI ──
-    k1, k2, k3, k4 = st.columns(4)
-    k1.metric("재확인 필요", f"{n_review}건", border=True)
-    k2.metric("신규 등장", f"{changes['신규']}건", border=True)
-    k3.metric("소실 객체", f"{changes['소실']}건", border=True)
-    k4.metric("판독 완료", f"{len(load_opinions())}건", border=True)
-
-    left, right = st.columns([1.5, 1], gap="medium")
-
-    # ── 표적 후보 현황 ──
-    with left:
-        st.markdown("##### 🎯 표적 후보 현황 (재확인 필요 우선)")
+    # ── 표적 후보 우선순위 + 조치 현황 도넛 ──
+    top_l, top_r = st.columns([1.6, 1], gap="medium")
+    with top_l:
+        st.markdown("##### 🎯 표적 후보 우선순위 (재확인 필요 우선)")
         st.dataframe(cand.drop(columns=["_scene"]), hide_index=True, width="stretch",
                      column_config={"재확인 필요": st.column_config.NumberColumn(format="%d건")})
         st.caption("단일=정밀 확인 / 지역=구역 단위 재확인 / 광역=지속 감시 및 우선순위 검토 대상")
+    with top_r:
+        st.markdown("##### 🍩 조치 현황")
+        if len(cand):
+            acted = {p[:-4] if str(p).endswith(".png") else str(p)
+                     for p in actions["대상 영상"]} if len(actions) else set()
+            n_done = int(cand["_scene"].isin(acted).sum())
+            counts = pd.DataFrame({"상태": ACTION_STATUS_ORDER,
+                                   "건수": [n_done, len(cand) - n_done]})
+            st.altair_chart(
+                donut_chart(counts, len(cand), ACTION_STATUS_ORDER, ACTION_STATUS_COLORS),
+                width="stretch")
+            st.caption(f"전체 표적 후보 {len(cand)}건 중 조치완료 {n_done}건")
+        else:
+            st.info("표적 후보가 없습니다.")
 
-    # ── 조치 기록 (타격성 표현 배제) ──
-    with right:
-        st.markdown("##### ⭐ 후속 조치 기록")
-        with st.form("commander_action", clear_on_submit=True):
-            labels = [f"{r['구역']} {r['시각']} · {r['센서']} ({r['표적 후보 유형']})"
-                      for _, r in cand.iterrows()]
-            idx = st.selectbox("대상 표적 후보", range(len(labels)),
-                               format_func=lambda i: labels[i]) if labels else None
-            action = st.selectbox("조치 유형", COMMANDER_ACTIONS)
-            content = st.text_area("조치 내용", height=80, max_chars=500,
-                                   placeholder="예: 야간 추가 정찰 요청, 상급 부대 보고")
-            basis = st.text_input("근거 요약", placeholder="예: 신규 차량 2대 + 재확인 필요 3건")
-            saved = st.form_submit_button("조치 기록 저장", type="primary", width="stretch")
-        if saved and idx is not None:
-            r = cand.iloc[idx]
-            u = current_user()
-            append_csv_row(COMMANDER_PATH, {
-                "작성시간": f"{dt.datetime.now():%Y-%m-%d %H:%M}",
-                "작성자": f"{u['rank']} {u['name']}" if u else "-",
-                "대상 영상": f"{r['_scene']}.png", "센서": r["센서"],
-                "위치": f"{r['구역']} {r['시각']}", "표적유형": r["표적 후보 유형"],
-                "조치유형": action, "조치 내용": content, "근거 요약": basis,
-            }, COMMANDER_COLS)
-            st.toast("지휘관 조치가 기록되었습니다.", icon="✅")
-        st.caption("ℹ️ 본 서비스는 자동 타격 권고·화력유도 자동화 기능을 제공하지 않습니다.")
-
-    # ── 최근 조치 + 보고서 출력 ──
-    actions = load_commander_actions()
-    st.markdown("##### 🗂️ 최근 지휘관 조치 기록")
-    st.dataframe(actions.iloc[::-1], hide_index=True, width="stretch")
+    # ── 후속 조치 기록 폼 + 최근 조치 (타격성 표현 배제) ──
+    form_l, form_r = st.columns([1.4, 1], gap="medium")
+    with form_l:
+        if st.toggle("⭐ 후속 조치 기록 작성", key="cmd_action_toggle"):
+            with st.form("commander_action", clear_on_submit=True):
+                labels = [f"{r['구역']} {r['시각']} · {r['센서']} ({r['표적 후보 유형']})"
+                          for _, r in cand.iterrows()]
+                idx = st.selectbox("대상 표적 후보", range(len(labels)),
+                                   format_func=lambda i: labels[i]) if labels else None
+                action = st.selectbox("조치 유형", COMMANDER_ACTIONS)
+                content = st.text_area("조치 내용", height=80, max_chars=500,
+                                       placeholder="예: 야간 추가 정찰 요청, 상급 부대 보고")
+                basis = st.text_input("근거 요약", placeholder="예: 신규 차량 2대 + 재확인 필요 3건")
+                saved = st.form_submit_button("조치 기록 저장", type="primary", width="stretch")
+            if saved and idx is not None:
+                r = cand.iloc[idx]
+                u = current_user()
+                append_csv_row(COMMANDER_PATH, {
+                    "작성시간": f"{dt.datetime.now():%Y-%m-%d %H:%M}",
+                    "작성자": f"{u['rank']} {u['name']}" if u else "-",
+                    "대상 영상": f"{r['_scene']}.png", "센서": r["센서"],
+                    "위치": f"{r['구역']} {r['시각']}", "표적유형": r["표적 후보 유형"],
+                    "조치유형": action, "조치 내용": content, "근거 요약": basis,
+                }, COMMANDER_COLS)
+                st.toast("지휘관 조치가 기록되었습니다.", icon="✅")
+                st.rerun()
+            st.caption("ℹ️ 본 서비스는 자동 타격 권고·화력유도 자동화 기능을 제공하지 않습니다.")
+    with form_r:
+        st.markdown("##### 🗂️ 최근 지휘관 조치 기록")
+        st.dataframe(actions.iloc[::-1].head(5), hide_index=True, width="stretch")
 
     st.download_button(
         "🖨️ 지휘관 요약 보고서 출력 (인쇄 서식 HTML)",

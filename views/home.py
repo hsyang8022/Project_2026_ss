@@ -1,37 +1,53 @@
-"""메인 화면 / 빠른 분석 — 6종 KPI 카드, 일일 업무 체크리스트, 오늘의 분석 건수 도넛, 최근 분석 미리보기.
+"""메인 화면 / 빠른 분석 (영상판독관) — 일일 업무 체크리스트, 오늘의 분석 건수 도넛,
+오늘 분석 대기 영상 + 분석 워크플로우 바로가기.
 
-전체 분석 로그 필터·조회·Export는 '분석 로그·인수인계' 페이지로 이관했다 (기획서 §4.9).
+판독관 수요(오늘 무엇을 분석할지 → 바로 분석 진입)에 맞춰 '오늘 분석 대기 영상' 패널과
+SAR/EO 분석·분석 로그 페이지 바로가기를 제공한다. 전체 로그 필터·조회·Export는
+'분석 로그·인수인계' 페이지에서 제공한다 (기획서 §4.9).
 """
 from __future__ import annotations
 
-import altair as alt
 import pandas as pd
 import streamlit as st
 
-from common import (change_totals, load_analysis_log, load_detections, load_opinions,
-                    render_header, render_sidebar_tree, review_needed_count)
+from common import (change_totals, donut_chart, list_scenes, load_analysis_log,
+                    load_opinions, render_header, render_sidebar_tree, scene_meta,
+                    scene_status)
 
 STATUS_ORDER = ["완료", "진행중", "대기"]
 STATUS_COLORS = ["#1f6fde", "#f5a623", "#b8c4d6"]
 
-LOG_COLUMN_ORDER = ["일시", "센서", "분석유형", "계급", "이름", "평균신뢰도", "내용", "상태", "파일명"]
 
-
-def _donut_chart(counts: pd.DataFrame, total: int) -> alt.LayerChart:
-    base = alt.Chart(counts).encode(
-        theta=alt.Theta("건수:Q"),
-        color=alt.Color(
-            "상태:N",
-            scale=alt.Scale(domain=STATUS_ORDER, range=STATUS_COLORS),
-            legend=alt.Legend(title=None, orient="right", labelFontSize=13),
-        ),
-        tooltip=["상태:N", "건수:Q"],
-    )
-    donut = base.mark_arc(innerRadius=62, outerRadius=92)
-    center = alt.Chart(pd.DataFrame({"라벨": [f"{total}건"]})).mark_text(
-        size=30, fontWeight="bold", color="#1c2b41"
-    ).encode(text="라벨:N")
-    return (donut + center).properties(height=240)
+def _pending_panel() -> None:
+    """오늘 분석 대기 영상 + SAR/EO 분석 페이지 바로가기 (판독관 빠른 분석 진입)."""
+    status = scene_status()
+    nav = st.session_state.get("nav_pages", {})
+    with st.container(border=True):
+        st.markdown("##### 🚀 오늘 분석 대기 영상")
+        cols = st.columns([1, 1, 0.9], gap="medium")
+        for col, sensor in zip(cols[:2], ("SAR", "EO")):
+            pending = [s for s in list_scenes(sensor)
+                       if status.get(f"{s}.png") != "분석완료"]
+            with col:
+                if pending:
+                    st.markdown(f"**📡 {sensor} · 미분석 {len(pending)}건**"
+                                if sensor == "SAR" else f"**🛰️ {sensor} · 미분석 {len(pending)}건**")
+                    for s in pending[:4]:
+                        m = scene_meta(s)
+                        st.caption(f"└ {m['수집일']} · {m['구역']} {m['시각']}")
+                    if len(pending) > 4:
+                        st.caption(f"… 외 {len(pending) - 4}건")
+                else:
+                    st.markdown(f"**{sensor}**")
+                    st.success("수집 영상 전부 분석 완료", icon="✅")
+        with cols[2]:
+            st.markdown("**바로가기**")
+            if "sar" in nav:
+                st.page_link(nav["sar"], label="SAR 분석", icon="📡", width="stretch")
+                st.page_link(nav["eo"], label="EO 분석", icon="🛰️", width="stretch")
+                st.page_link(nav["log"], label="분석 로그·인수인계", icon="🧾", width="stretch")
+            else:
+                st.caption("상단 메뉴의 SAR/EO 분석·분석 로그로 이동하세요.")
 
 
 def home_page() -> None:
@@ -42,26 +58,9 @@ def home_page() -> None:
     today = pd.Timestamp.today().normalize()
     day = log["일시"].dt.normalize()
     today_df = log[day == today]
-    yest_df = log[day == today - pd.Timedelta(days=1)]
 
-    det = load_detections()
     changes = change_totals()
     n_opinion = len(load_opinions())
-
-    # ── 6종 요약 KPI 카드 (기획서 §4.2) ──
-    c1, c2, c3, c4, c5, c6 = st.columns(6)
-    c1.metric("오늘 분석 건수", f"{len(today_df)}건",
-              delta=f"{len(today_df) - len(yest_df):+d}건 (전일 대비)", border=True)
-    c2.metric("탐지 객체 수", f"{len(det)}건", border=True,
-              help="AI가 탐지한 전체 객체 후보 수입니다.")
-    c3.metric("재확인 필요", f"{review_needed_count()}건", border=True,
-              help="신뢰도 저하 등으로 재검토가 필요한 객체 후보 수입니다.")
-    c4.metric("신규 등장", f"{changes['신규']}건", border=True,
-              help="이전 시점 대비 새롭게 탐지된 객체 후보 수입니다.")
-    c5.metric("소실 객체", f"{changes['소실']}건", border=True,
-              help="이전 시점에는 있었으나 현재 탐지되지 않은 객체 수입니다.")
-    c6.metric("판독 완료", f"{n_opinion}건", border=True,
-              help="판독관 의견이 저장된 분석 건수입니다.")
 
     left, right = st.columns([1, 1.4], gap="large")
 
@@ -88,15 +87,8 @@ def home_page() -> None:
             counts = (today_df["상태"].value_counts()
                       .reindex(STATUS_ORDER, fill_value=0)
                       .rename_axis("상태").reset_index(name="건수"))
-            st.altair_chart(_donut_chart(counts, len(today_df)), width="stretch")
+            st.altair_chart(donut_chart(counts, len(today_df), STATUS_ORDER, STATUS_COLORS),
+                            width="stretch")
             st.caption(f"기준: {today:%Y-%m-%d}")
 
-    st.markdown("##### 📋 최근 분석 로그 (최근 8건)")
-    recent = log.sort_values("일시", ascending=False).head(8)
-    st.dataframe(
-        recent, hide_index=True, width="stretch", column_order=LOG_COLUMN_ORDER,
-        column_config={
-            "일시": st.column_config.DatetimeColumn("일시", format="YYYY-MM-DD HH:mm"),
-            "평균신뢰도": st.column_config.ProgressColumn("신뢰도", min_value=0.0, max_value=1.0, format="percent"),
-        })
-    st.caption("🔎 전체 로그 필터·검색·CSV Export와 인수인계는 상단 '분석 로그·인수인계' 페이지에서 제공합니다.")
+    _pending_panel()

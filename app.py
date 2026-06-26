@@ -45,16 +45,21 @@ if st.session_state.logged_in:
         ]
     else:
         # 영상판독관: 탐지 검토 → 신뢰성·변화 분석 → 인수인계 전체 흐름
+        sar_pg = st.Page(sar_page, title="SAR 분석", icon="📡")
+        eo_pg = st.Page(eo_page, title="EO 분석", icon="🛰️")
+        log_pg = st.Page(handover_page, title="분석 로그·인수인계", icon="🧾")
         pages = [
             st.Page(home_page, title="메인 대시보드", icon="🏠", default=True),
-            st.Page(sar_page, title="SAR 분석", icon="📡"),
-            st.Page(eo_page, title="EO 분석", icon="🛰️"),
+            sar_pg,
+            eo_pg,
             st.Page(reliability_page, title="신뢰성 검토", icon="🔬"),
             st.Page(compare_page, title="비교 분석", icon="🆚"),
             st.Page(change_analysis_page, title="시간대별 변화 분석", icon="⏱️"),
-            st.Page(handover_page, title="분석 로그·인수인계", icon="🧾"),
+            log_pg,
             st.Page(user_info_page, title="사용자 정보", icon="👤"),
         ]
+        # 메인 대시보드의 '오늘 분석 대기 영상' 바로가기(st.page_link)용 페이지 참조 공유.
+        st.session_state["nav_pages"] = {"sar": sar_pg, "eo": eo_pg, "log": log_pg}
     pg = st.navigation(pages, position="top")
 else:
     pg = st.navigation([st.Page(login_page, title="로그인", icon="🔐")], position="hidden")

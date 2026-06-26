@@ -4,6 +4,7 @@ from __future__ import annotations
 import datetime as dt
 from pathlib import Path
 
+import altair as alt
 import pandas as pd
 import streamlit as st
 from PIL import Image, ImageDraw, ImageFont
@@ -59,6 +60,29 @@ TARGET_TYPE_GUIDE = {
     "지역표적 후보": "구역 단위 재확인 대상",
     "광역표적 후보": "지속 감시 및 우선순위 검토 대상",
 }
+
+
+def donut_chart(counts: pd.DataFrame, total: int, domain: list[str], colors: list[str],
+                label_col: str = "상태", value_col: str = "건수",
+                center_label: str | None = None, height: int = 220) -> alt.LayerChart:
+    """공용 도넛 차트 — 분류별 건수 arc + 중앙 합계 텍스트 (메인 대시보드·지휘관 요약 공용).
+
+    counts: [label_col, value_col] 컬럼을 가진 DataFrame.
+    """
+    base = alt.Chart(counts).encode(
+        theta=alt.Theta(f"{value_col}:Q"),
+        color=alt.Color(
+            f"{label_col}:N",
+            scale=alt.Scale(domain=domain, range=colors),
+            legend=alt.Legend(title=None, orient="right", labelFontSize=13),
+        ),
+        tooltip=[f"{label_col}:N", f"{value_col}:Q"],
+    )
+    donut = base.mark_arc(innerRadius=58, outerRadius=86)
+    center = alt.Chart(pd.DataFrame({"라벨": [center_label or f"{total}건"]})).mark_text(
+        size=28, fontWeight="bold", color="#1c2b41"
+    ).encode(text="라벨:N")
+    return (donut + center).properties(height=height)
 
 
 def get_font(size: int):

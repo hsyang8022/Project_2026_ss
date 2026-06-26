@@ -24,7 +24,7 @@ COMPARISON_PATH = DATA_DIR / "comparisons.csv"
 COMPARISON_COLS = ["저장시각", "작성자"] + [
     f"Q{q}_{field}" for q in range(1, 5) for field in ("영상", "파일", "메모")]
 
-IMG_WIDTH = 500  # 1080p 100% 배율에서 2행이 한 화면에 들어가는 고정폭(px)
+IMG_WIDTH = 400  # 1080p 100% 배율에서 2행이 한 화면에 들어가는 고정폭(px)
 
 
 def _reset_layout() -> None:
